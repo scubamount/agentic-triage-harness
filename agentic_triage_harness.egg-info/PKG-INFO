@@ -1,0 +1,133 @@
+Metadata-Version: 2.4
+Name: agentic-triage-harness
+Version: 0.1.0
+Summary: Constraint-satisfaction harness for agentic debugging and triage: prompts, case schema, matrix and intervention-ledger tools
+Author: scubamount
+License: MIT
+Keywords: triage,debugging,agents,code-review
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: license-file
+
+# agentic-triage-harness
+
+Prompt templates, a case schema, and two small tools for running agentic
+debugging and triage as a **constraint-satisfaction problem** instead of an
+open-ended hypothesis search — with a metric for how much human help each
+case still needed.
+
+Methodology after ["How to effectively debug when you no longer understand the
+code"](https://copyconstruct.medium.com/how-to-effectively-debug-when-you-no-longer-understand-the-code-bd3dcb2c5f7b)
+by Cindy Sridharan (2026). Concepts and the two example cases are attributed to
+that post; the templates and tools here are original implementations.
+
+## Charter
+
+- **Problem:** agent triage/review workflows fail in predictable ways —
+  findings with no citable backing, reviewers that corroborate instead of
+  eliminate, repros of the wrong bug accepted as proof, and no measurement of
+  how much human steering each case needed. The methodology existed only as one
+  operator's private skill library.
+- **Who hits it:** anyone running bounded reviewer/triager agents over PRs,
+  issues, or incidents (CI bots, kanban review lanes, ops triage).
+- **Done-when:** an operator can point the templates at their workflow and get
+  constraint-checked findings, an elimination-objective reviewer, repro-parity
+  gating, and an interventions-per-case metric that trends down.
+- **Non-goals:** production-access machinery, formal verification, any
+  harness-specific SDK. Templates stay provider-neutral.
+
+## The framework in one page
+
+Debugging is a constraint problem with two tiers:
+
+- **Factual tier (bottom):** immutable facts gathered from external sources —
+  logs, telemetry, configs, git history, packet captures, profiles, kernel
+  data, user reports. Facts are constraints; an agent may only observe,
+  analyze, or request more.
+- **Derivative tier (top):** hypotheses, conclusions, narratives. A hypothesis
+  is valid **only if consistent with every fact**. One contradicting fact
+  discards it.
+
+Operational rules that make this enforceable:
+
+1. **Control / variable / signal.** The control differs from the variable
+   (broken case) by exactly the suspected cause. A data point in the variable
+   but not the control is a high-fidelity signal; in both, it is noise
+   (elimination only, never steering).
+2. **Strong vs weak signals.** Strong = few hypotheses are consistent with it
+   (ideally one). SLOs, SLIs and generic failures are weak — almost anything
+   explains them. The matrix makes this arithmetic.
+3. **Three-step loop.** Isolate high-fidelity signals (with a control) →
+   isolate the most promising hypothesis (the matrix) → validate against every
+   constraint, including the noise.
+4. **When no hypothesis fits all facts**, in order: reverify how the facts
+   were gathered → split coarse hypotheses → merge over-fine ones → combine
+   complementary ones (each strictly necessary) → only then a new hypothesis
+   guided by existing facts, or gather more facts.
+5. **Progressive signal discovery.** Descend layers (logs → telemetry →
+   packets → process state → kernel) until a strong signal emerges, then
+   stop. Strongest signal, not deepest.
+6. **Repros are derivative tier.** A repro is valid only if it reproduces the
+   reporter's actual signal. Divergence means it is a different bug — noise.
+7. **Adversarial review = elimination.** It cannot detect missing constraints,
+   so use it to contradict, with citations; unbacked claims are culled.
+8. **Mind the gap.** Every human intervention is a process defect. Count
+   interventions per case; the goal is zero, and every intervention should
+   become policy.
+
+## Quickstart
+
+```bash
+# Score a case against the matrix
+python3 tools/matrix.py examples/latency-p99-regression.json
+python3 tools/matrix.py your-case.json --json
+
+# Record a human intervention (the autonomy metric)
+export INTERVENTION_LEDGER=./interventions.jsonl   # default: ./interventions.jsonl (cwd)
+python3 tools/intervention-ledger.py add constraint-supplied my-case#7 "version pin came from the human"
+python3 tools/intervention-ledger.py trend --months 6
+
+# Run the tests
+pytest tests/ -q
+```
+
+## Layout
+
+| Path | What |
+|---|---|
+| `schema/triage-case.json` | Case format: facts (with provenance), hypotheses (consistency sets), verdict with citations + repro parity |
+| `tools/matrix.py` | Signal strength, candidates, unexplained facts, contradicted facts; the all-consistent-row check |
+| `tools/intervention-ledger.py` | Append/trend the interventions-per-case metric |
+| `templates/bounded-triager-prompt.md` | First-pass triager directive with control + matrix + repro-parity discipline |
+| `templates/adversarial-reviewer-brief.md` | Elimination-objective reviewer brief with per-round lens variation |
+| `examples/` | Two attributed teaching cases: the latency matrix and the repro-parity rejection |
+
+## Case schema in brief
+
+```json
+{
+  "case_id": "...",
+  "variable": "the broken case",
+  "control": "the comparison case",
+  "facts": [{"id": "f1", "observation": "...", "seen_in": "variable|control|both",
+             "provenance": {"source": "...", "host": "...", "time_window": "...", "tool_version": "..."}}],
+  "hypotheses": [{"id": "h1", "text": "...", "consistent_with": ["f1", "f3"]}],
+  "verdict": {"hypothesis_id": "h1", "citations": ["f1", "f3"], "repro_parity": "matched|diverged|no-repro"}
+}
+```
+
+Every fact not listed in a hypothesis's `consistent_with` counts as
+contradicted by it. A candidate hypothesis is consistent with all facts.
+`tools/matrix.py` reports exactly that, plus which facts remain unexplained.
+
+## Intervention types
+
+`control-supplied`, `constraint-supplied`, `citation-demanded`,
+`hypothesis-rejected`, `repro-parity-demand`, `verdict-flipped`,
+`policy-codified`. The last is the desired terminal state for every other one:
+an intervention that became standing policy should never recur.
+
+## License
+
+MIT. See `LICENSE`.

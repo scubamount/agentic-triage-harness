@@ -92,7 +92,7 @@ def analyze(case):
         "signal_strength": strength,
         "strong_signals": [
             fid for fid, n in strength.items()
-            if n <= 1 and facts[fid].get("seen_in") != "both"
+            if n <= 1 and facts[fid].get("seen_in") == "variable"
         ],
         "noise": [fid for fid in all_fact_ids if facts[fid].get("seen_in") in NOISE],
         "candidates": candidates,

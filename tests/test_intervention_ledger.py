@@ -52,9 +52,8 @@ def test_add_rejects_unknown_type(ledger):
 
 
 def test_trend_buckets_by_month(ledger):
-    ts = "2026-09-15T10:00:00+00:00"
     entries = [
-        {"ts": ts, "type": "constraint-supplied", "case": "a", "note": "", "source": "operator"},
+        {"ts": "2026-09-15T10:00:00+00:00", "type": "constraint-supplied", "case": "a", "note": "", "source": "operator"},
         {"ts": "2026-09-20T10:00:00+00:00", "type": "citation-demanded", "case": "a", "note": "", "source": "operator"},
         {"ts": "2026-10-02T10:00:00+00:00", "type": "constraint-supplied", "case": "b", "note": "", "source": "operator"},
     ]
@@ -62,9 +61,40 @@ def test_trend_buckets_by_month(ledger):
     proc = run("trend", "--months", "3")
     assert proc.returncode == 0
     assert "2026-09" in proc.stdout and "2026-10" in proc.stdout
-    # September had two interventions, October one -> trajectory down.
+    # September: two open interventions on ONE case (2.00/case); October: one
+    # on one case (1.00/case) -> per-case trajectory down.
     assert "down" in proc.stdout
     assert "constraint-supplied:1" in proc.stdout
+
+
+def test_trend_reports_per_case_not_raw_totals(ledger):
+    # Reviewer counterexample (2026-10-12): two months with one intervention
+    # per case each must read FLAT, not "down" — the metric is interventions
+    # per case, and monthly totals say nothing about per-case performance.
+    entries = [
+        {"ts": "2026-09-10T10:00:00+00:00", "type": "constraint-supplied", "case": "a", "note": "", "source": "operator"},
+        {"ts": "2026-09-11T10:00:00+00:00", "type": "citation-demanded", "case": "b", "note": "", "source": "operator"},
+        {"ts": "2026-10-05T10:00:00+00:00", "type": "verdict-flipped", "case": "c", "note": "", "source": "operator"},
+    ]
+    ledger.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
+    proc = run("trend", "--months", "3")
+    assert proc.returncode == 0
+    assert "flat" in proc.stdout
+    assert "1.00" in proc.stdout
+
+
+def test_policy_codified_is_not_an_open_intervention(ledger):
+    entries = [
+        {"ts": "2026-10-01T10:00:00+00:00", "type": "constraint-supplied", "case": "a", "note": "", "source": "operator"},
+        {"ts": "2026-10-02T10:00:00+00:00", "type": "policy-codified", "case": "a", "note": "", "source": "operator"},
+    ]
+    ledger.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
+    proc = run("trend", "--months", "3")
+    assert proc.returncode == 0
+    # October row: total 2, open 1, codified 1, one case -> open/case 1.00.
+    row = [l for l in proc.stdout.splitlines() if l.startswith("2026-10")][0]
+    fields = row.split()
+    assert fields[1] == "2" and fields[2] == "1" and fields[3] == "1"
 
 
 def test_trend_on_empty_ledger_is_not_an_error(ledger):

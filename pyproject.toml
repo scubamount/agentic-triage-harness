@@ -12,5 +12,8 @@ requires-python = ">=3.9"
 authors = [{name = "scubamount"}]
 keywords = ["triage", "debugging", "agents", "code-review"]
 
+[tool.setuptools]
+packages = []
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

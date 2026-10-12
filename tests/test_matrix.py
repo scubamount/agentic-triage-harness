@@ -93,6 +93,23 @@ def test_latency_noise_is_marked_elimination_only():
     assert out["unexplained_facts"] == []
 
 
+def test_control_only_fact_is_never_a_strong_signal():
+    # Reviewer counterexample (2026-10-12): a fact seen only in the control was
+    # reported as both noise and a strong signal. Strength means "steers the
+    # investigation", and only variable-present facts can steer.
+    case = json.loads(json.dumps(LATENCY_CASE))
+    case["facts"].append(
+        {"id": "f5", "observation": "something only the control shows", "seen_in": "control"}
+    )
+    # No hypothesis is consistent with f5 (it discriminates nothing about the
+    # variable), so it is also unexplained.
+    proc = run_matrix(case, "--json")
+    out = json.loads(proc.stdout)
+    assert "f5" in out["noise"]
+    assert "f5" not in out["strong_signals"]
+    assert "f5" in out["unexplained_facts"]
+
+
 def test_memleak_combined_hypothesis_is_the_only_candidate():
     proc = run_matrix(MEMLEAK_CASE, "--json")
     assert proc.returncode == 0, proc.stderr

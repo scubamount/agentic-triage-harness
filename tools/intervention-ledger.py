@@ -109,7 +109,6 @@ def list_entries(entry_type=None, limit=None):
 
 def trend(months=6):
     entries = load_entries()
-    now = dt.datetime.now(dt.timezone.utc)
     buckets = {}
     for e in entries:
         try:
@@ -119,24 +118,38 @@ def trend(months=6):
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=dt.timezone.utc)
         key = ts.strftime("%Y-%m")
-        buckets.setdefault(key, {"total": 0, "types": {}})
-        buckets[key]["total"] += 1
-        buckets[key]["types"][e["type"]] = buckets[key]["types"].get(e["type"], 0) + 1
+        b = buckets.setdefault(key, {"total": 0, "open": 0, "codified": 0,
+                                     "cases": set(), "types": {}})
+        b["total"] += 1
+        if e.get("type") == "policy-codified":
+            b["codified"] += 1
+        else:
+            b["open"] += 1
+        b["cases"].add(e.get("case", ""))
+        b["types"][e["type"]] = b["types"].get(e["type"], 0) + 1
     recent = sorted(buckets)[-months:]
     if not recent:
         print("no interventions recorded; nothing to trend")
         return 0
-    print(f"{'month':<9} {'total':>5}  breakdown")
+
+    def per_case(b):
+        return b["open"] / len(b["cases"]) if b["cases"] else 0.0
+
+    print(f"{'month':<9} {'total':>5} {'open':>5} {'cases':>6} {'open/case':>10}  breakdown")
     for key in recent:
         b = buckets[key]
         breakdown = ", ".join(f"{t}:{n}" for t, n in sorted(b["types"].items()))
-        print(f"{key:<9} {b['total']:>5}  {breakdown}")
-    # Trajectory: compare first and last recorded month.
+        print(f"{key:<9} {b['total']:>5} {b['open']:>5} {len(b['cases']):>6} "
+              f"{per_case(b):>10.2f}  {breakdown}")
+    # The autonomy metric is open interventions PER CASE, not raw monthly
+    # totals: two months can each log one intervention per case and be flat
+    # even when one month covered more work.
     first, last = recent[0], recent[-1]
     if first != last:
-        delta = buckets[last]["total"] - buckets[first]["total"]
+        delta = per_case(buckets[last]) - per_case(buckets[first])
         direction = "down" if delta < 0 else "up" if delta > 0 else "flat"
-        print(f"trend: {direction} ({first} -> {last}: {delta:+d} total)")
+        print(f"trend (open interventions per case): {direction} "
+              f"({first} {per_case(buckets[first]):.2f} -> {last} {per_case(buckets[last]):.2f})")
     return 0
 
 
