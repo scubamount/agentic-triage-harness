@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/scubamount/agentic-triage-harness/main/schema/triage-case.json",
+  "title": "TriageCase",
+  "description": "A debugging/triage investigation recorded as a two-tier constraint problem: immutable facts (bottom tier) and hypotheses (top tier). A hypothesis is valid only if consistent with every fact. See README.md.",
+  "type": "object",
+  "required": ["facts", "hypotheses"],
+  "properties": {
+    "case_id": {"type": "string", "description": "Stable identifier for this investigation."},
+    "variable": {"type": "string", "description": "The broken case where the bug shows up."},
+    "control": {"type": "string", "description": "The comparison case; identical to the variable except for the suspected cause. A sad path that fails differently is a valid control."},
+    "facts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "observation", "seen_in"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "observation": {"type": "string", "description": "What was measured or read, stated exactly."},
+          "seen_in": {
+            "type": "string",
+            "enum": ["variable", "control", "both"],
+            "description": "variable = high-fidelity signal (in the broken case, absent from the control); both = noise (elimination only); control = recorded for completeness."
+          },
+          "provenance": {
+            "type": "object",
+            "description": "How the fact was gathered. The first thing to re-verify when evidence seems to contradict itself.",
+            "properties": {
+              "source": {"type": "string", "description": "log, telemetry, packet capture, heap profile, kernel table, config, git history, user report..."},
+              "host": {"type": "string"},
+              "time_window": {"type": "string"},
+              "tool_version": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "consistent_with"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "text": {"type": "string", "description": "The mechanism proposed as cause. Combine complementary causes as one hypothesis entry only while each remains strictly necessary."},
+          "consistent_with": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Fact ids this hypothesis does not contradict. Every fact NOT listed counts as contradicted. A candidate is consistent with all facts."
+          },
+          "combined_from": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Optional: hypothesis ids this entry combines. Removing any must leave some fact unexplained."
+          }
+        }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "properties": {
+        "hypothesis_id": {"type": "string"},
+        "citations": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Every claim in the verdict points at a fact id from the factual tier. Unbacked claims are dropped, not padded."
+        },
+        "repro_parity": {
+          "type": "string",
+          "enum": ["matched", "diverged", "no-repro"],
+          "description": "Did a reproduction emit the same high-fidelity signal as the report? diverged = the repro is a different bug and is noise."
+        }
+      }
+    }
+  }
+}

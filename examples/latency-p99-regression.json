@@ -1,0 +1,53 @@
+{
+  "case_id": "latency-p99-regression",
+  "variable": "New feature (~9000 LOC, agent-written) enabled on both client and server; smallest production rollout (~5000 hosts in one datacenter). Client-side P99 latency regressed within ~10 minutes of the flag flip.",
+  "control": "Same code with the feature flag disabled on client and server.",
+  "facts": [
+    {
+      "id": "f1",
+      "observation": "Client DNS lookup for the storage service returned ~400 addresses in the variable, ~5 in the control.",
+      "seen_in": "variable",
+      "provenance": {"source": "live production host, DNS lookups observed during client monitoring", "host": "one of ~5000 flag-on hosts"}
+    },
+    {
+      "id": "f2",
+      "observation": "Cross-datacenter TCP session establishment time did not differ between control and variable (tens of milliseconds in both).",
+      "seen_in": "both",
+      "provenance": {"source": "tcpdump on a flag-on client host plus a flag-off client against a flag-off server"}
+    },
+    {
+      "id": "f3",
+      "observation": "Server-side P99 latency regressed in aggregate graphs.",
+      "seen_in": "variable",
+      "provenance": {"source": "service telemetry dashboards"}
+    },
+    {
+      "id": "f4",
+      "observation": "The TLS certificate is loaded once during initial session establishment, not per RPC call (verified by monitoring the running process in both variable and control).",
+      "seen_in": "both",
+      "provenance": {"source": "process monitoring on a live flag-on client host"}
+    }
+  ],
+  "hypotheses": [
+    {
+      "id": "h1",
+      "text": "Server reloads the TLS certificate on every RPC call over the established session, adding per-call cost.",
+      "consistent_with": ["f2", "f3"]
+    },
+    {
+      "id": "h2",
+      "text": "The new mTLS codepaths bypass the sharded database client, so requests route to a random pod which then fetches from or forwards to the correct shard, inflating tail latency on both reads and writes.",
+      "consistent_with": ["f1", "f2", "f3", "f4"]
+    },
+    {
+      "id": "h3",
+      "text": "Server-side capacity degradation or event-loop stalls.",
+      "consistent_with": ["f3"]
+    }
+  ],
+  "verdict": {
+    "hypothesis_id": "h2",
+    "citations": ["f1", "f2", "f3", "f4"],
+    "repro_parity": "no-repro"
+  }
+}
