@@ -123,9 +123,10 @@ def main(argv=None):
         print(json.dumps(result, indent=2))
         return 0
     print(f"case: {result['case_id'] or '(unnamed)'}")
+    strong = set(result["strong_signals"])
     print("signal strength (hypotheses consistent; <=1 is strong):")
     for fid, n in result["signal_strength"].items():
-        tag = "STRONG" if n <= 1 else "weak"
+        tag = "STRONG" if fid in strong else "weak"
         noise = " (noise: elimination only)" if fid in result["noise"] else ""
         print(f"  {fid}: {n} hypotheses [{tag}]{noise}")
     print(f"candidates (consistent with every fact): {result['candidates'] or 'none'}")

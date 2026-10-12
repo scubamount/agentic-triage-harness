@@ -141,6 +141,21 @@ def test_human_readable_output_runs_clean():
     assert "h2" in proc.stdout
 
 
+def test_human_readable_labels_match_json_strong_signals():
+    # Reviewer counterexample (2026-10-12): the default CLI printed STRONG for
+    # a control-only fact while the JSON correctly excluded it. The display
+    # must derive its labels from strong_signals, not recompute them.
+    case = json.loads(json.dumps(LATENCY_CASE))
+    case["facts"].append(
+        {"id": "f5", "observation": "something only the control shows", "seen_in": "control"}
+    )
+    proc = run_matrix(case)
+    assert proc.returncode == 0
+    f5_line = [l for l in proc.stdout.splitlines() if l.strip().startswith("f5:")][0]
+    assert "STRONG" not in f5_line
+    assert "weak" in f5_line
+
+
 def test_unknown_fact_reference_is_rejected():
     case = json.loads(json.dumps(LATENCY_CASE))
     case["hypotheses"][0]["consistent_with"].append("f99")

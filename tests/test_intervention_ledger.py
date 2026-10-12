@@ -91,10 +91,29 @@ def test_policy_codified_is_not_an_open_intervention(ledger):
     ledger.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
     proc = run("trend", "--months", "3")
     assert proc.returncode == 0
-    # October row: total 2, open 1, codified 1, one case -> open/case 1.00.
+    # October row: total 2, open 1, one open case -> open/case 1.00.
     row = [l for l in proc.stdout.splitlines() if l.startswith("2026-10")][0]
     fields = row.split()
     assert fields[1] == "2" and fields[2] == "1" and fields[3] == "1"
+
+
+def test_policy_only_case_never_enters_the_denominator(ledger):
+    # Reviewer counterexample (2026-10-12): codifying one case's policy in a
+    # later month must not manufacture a downward trend. September: one open
+    # intervention on one case. October: one open on another case PLUS a
+    # policy-codified-only case. Per-case rate must read flat at 1.00.
+    entries = [
+        {"ts": "2026-09-10T10:00:00+00:00", "type": "constraint-supplied", "case": "a", "note": "", "source": "operator"},
+        {"ts": "2026-10-05T10:00:00+00:00", "type": "verdict-flipped", "case": "b", "note": "", "source": "operator"},
+        {"ts": "2026-10-06T10:00:00+00:00", "type": "policy-codified", "case": "c", "note": "", "source": "operator"},
+    ]
+    ledger.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
+    proc = run("trend", "--months", "3")
+    assert proc.returncode == 0
+    assert "flat" in proc.stdout
+    row = [l for l in proc.stdout.splitlines() if l.startswith("2026-10")][0]
+    fields = row.split()
+    assert fields[2] == "1" and fields[3] == "1"  # open=1, open-cases=1
 
 
 def test_trend_on_empty_ledger_is_not_an_error(ledger):
